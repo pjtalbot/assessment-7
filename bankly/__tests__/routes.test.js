@@ -17,6 +17,7 @@ const tokens = {};
 /** before each test, insert u1, u2, and u3  [u3 is admin] */
 
 beforeEach(async function() {
+  // attn: look into _pwd and _token. Why the underscore?
   async function _pwd(password) {
     return await bcrypt.hash(password, 1);
   }
@@ -45,6 +46,7 @@ describe("POST /auth/register", function() {
         password: "new_password",
         first_name: "new_first",
         last_name: "new_last",
+        // attn: allows duplicate
         email: "new@newuser.com",
         phone: "1233211221"
       });
@@ -73,6 +75,24 @@ describe("POST /auth/register", function() {
       message: `There already exists a user with username 'u1'`
     });
   });
+  test("should not allow a user to register with an existing email", async function() {
+    const response = await request(app)
+      .post("/auth/register")
+      .send({
+        username: "new_user",
+        password: "pwd1",
+        first_name: "new_first",
+        last_name: "new_last",
+        email: "email2",
+        phone: "1233211221"
+      });
+    expect(response.statusCode).toBe(400);
+    expect(response.body).toEqual({
+      status: 400,
+      message: `There already exists a user with email 'email2'`
+    });
+  });
+  
 });
 
 describe("POST /auth/login", function() {
@@ -84,6 +104,20 @@ describe("POST /auth/login", function() {
         password: "pwd1"
       });
     expect(response.statusCode).toBe(200);
+    expect(response.body).toEqual({ token: expect.any(String) });
+
+    let { username, admin } = jwt.verify(response.body.token, SECRET_KEY);
+    expect(username).toBe("u1");
+    expect(admin).toBe(false);
+  });
+  test("should return 401 if username does not match", async function() {
+    const response = await request(app)
+      .post("/auth/login")
+      .send({
+        username: "u1",
+        password: "pwd234"
+      });
+    expect(response.statusCode).toBe(401);
     expect(response.body).toEqual({ token: expect.any(String) });
 
     let { username, admin } = jwt.verify(response.body.token, SECRET_KEY);
@@ -104,6 +138,16 @@ describe("GET /users", function() {
       .send({ _token: tokens.u1 });
     expect(response.statusCode).toBe(200);
     expect(response.body.users.length).toBe(3);
+  });
+  test("should only return username, firstname, lastname", async function() {
+    const response = await request(app)
+      .get("/users")
+      .send({ _token: tokens.u1 });
+    expect(response.statusCode).toBe(200);
+    expect(response.body.users[0].password).toBe(undefined);
+    expect(response.body.users[0].email).toBe(undefined);
+    
+    expect(response.body.users[0].phoneNumber).toBe(undefined);
   });
 });
 
@@ -126,6 +170,13 @@ describe("GET /users/[username]", function() {
       phone: "phone1"
     });
   });
+  test("should return 404 error if no user is found", async function() {
+    const response = await request(app)
+      .get("/users/u123")
+      .send({ _token: tokens.u1 });
+    expect(response.statusCode).toBe(404);
+    
+  });
 });
 
 describe("PATCH /users/[username]", function() {
@@ -139,6 +190,12 @@ describe("PATCH /users/[username]", function() {
       .patch("/users/u1")
       .send({ _token: tokens.u2 }); // wrong user!
     expect(response.statusCode).toBe(401);
+  });
+  test("should allow access if right user", async function() {
+    const response = await request(app)
+      .patch("/users/u1")
+      .send({ _token: tokens.u1 }); // correct user
+    expect(response.statusCode).toBe(200);
   });
 
   test("should patch data if admin", async function() {
@@ -163,13 +220,27 @@ describe("PATCH /users/[username]", function() {
       .send({ _token: tokens.u1, admin: true });
     expect(response.statusCode).toBe(401);
   });
-
+// this test passes! So this is the one route using 404 properly
   test("should return 404 if cannot find", async function() {
     const response = await request(app)
       .patch("/users/not-a-user")
       .send({ _token: tokens.u3, first_name: "new-fn" }); // u3 is admin
     expect(response.statusCode).toBe(404);
   });
+  test("should throw error if trying to change non existing field", async function() {
+    const response = await request(app)
+      .patch("/users/u1")
+      .send({ _token: tokens.u3, new_field: "new-fn" }); // u3 is admin
+    expect(response.statusCode).toBe(500);
+    expect
+  });
+  test("should throw error if trying to change password", async function() {
+    const response = await request(app)
+      .patch("/users/u1")
+      .send({ _token: tokens.u3, password: "new-fn" }); // u3 is admin
+    expect(response.statusCode).toBe(500);
+  });
+  
 });
 
 describe("DELETE /users/[username]", function() {
@@ -191,6 +262,22 @@ describe("DELETE /users/[username]", function() {
       .send({ _token: tokens.u3 }); // u3 is admin
     expect(response.statusCode).toBe(200);
     expect(response.body).toEqual({ message: "deleted" });
+  });
+
+  test("should return 404 if cannot find", async function() {
+    const response = await request(app)
+      .patch("/users/not-a-user")
+      .send({ _token: tokens.u3, first_name: "new-fn" }); // u3 is admin
+    expect(response.statusCode).toBe(404);
+  });
+  test("should return 404 if user-not-found", async function() {
+    const response = await request(app)
+      .delete("/users/u55")
+      .send({ _token: tokens.u3 }); // u3 is admin
+      // console.log(response)
+      expect(response.body).toEqual({ message: "deleted" });
+      expect(response).toThrow()
+    expect(response.statusCode).toBe(404);
   });
 });
 

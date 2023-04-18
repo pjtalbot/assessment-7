@@ -16,9 +16,23 @@ class User {
       [username]
     );
 
+    const emailCheck = await db.query(
+      `SELECT username 
+        FROM users 
+        WHERE email = $1`,
+      [email]
+    );
+
     if (duplicateCheck.rows[0]) {
       throw new ExpressError(
         `There already exists a user with username '${username}'`,
+        400
+      );
+    }
+
+    if (emailCheck.rows[0]) {
+      throw new ExpressError(
+        `There already exists a user with email '${email}'`,
         400
       );
     }
@@ -51,6 +65,7 @@ class User {
    * */
 
   static async authenticate(username, password) {
+    debugger;
     const result = await db.query(
       `SELECT username,
                 password,
@@ -83,9 +98,7 @@ class User {
     const result = await db.query(
       `SELECT username,
                 first_name,
-                last_name,
-                email,
-                phone
+                last_name
             FROM users 
             ORDER BY username`
     );
@@ -111,6 +124,7 @@ class User {
     );
 
     const user = result.rows[0];
+    console.log(user)
 
     if (!user) {
       new ExpressError('No such user', 404);
@@ -137,6 +151,7 @@ class User {
 
     const result = await db.query(query, values);
     const user = result.rows[0];
+    // console.log(user)
 
     if (!user) {
       throw new ExpressError('No such user', 404);
@@ -152,11 +167,13 @@ class User {
    **/
 
   static async delete(username) {
-    const result = await db.query(
+    let result = await db.query(
       'DELETE FROM users WHERE username = $1 RETURNING username',
       [username]
     );
     const user = result.rows[0];
+    console.log('*********')
+    console.log(user)
 
     if (!user) {
       throw new ExpressError('No such user', 404);

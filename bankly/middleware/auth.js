@@ -46,6 +46,7 @@ function requireAdmin(req, res, next) {
 
 function authUser(req, res, next) {
   try {
+    // attn: I don't believe the token should be in the query string
     const token = req.body._token || req.query._token;
     if (token) {
       let payload = jwt.decode(token);
